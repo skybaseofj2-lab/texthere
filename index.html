@@ -3,10 +3,12 @@
 <head>
 <meta name="viewport" content="width=device-width">
 <title>Private Chat</title>
+
 <style>
 body{margin:0;background:#020617;color:#fff;font-family:system-ui}
 #app{max-width:420px;margin:auto;height:100vh;display:flex;flex-direction:column}
 header{padding:12px;text-align:center;font-weight:600;border-bottom:1px solid #1e293b}
+#joinBox{padding:12px}
 #msgs{flex:1;overflow:auto;padding:10px}
 .msg{margin:6px 0;padding:8px;border-radius:8px;max-width:75%}
 .me{background:#2563eb;margin-left:auto}
@@ -20,61 +22,76 @@ button{background:#2563eb;color:#fff}
 
 <body>
 <div id="app">
-<header id="title">Join Chat</header>
+  <header id="title">Join Chat</header>
 
-<div id="join">
-  <input id="room" placeholder="Secret key"> </input>
-  <input id="user" placeholder="Username"> </input>
-  <button onclick="join()">Join</button>
-</div>
-
-<div id="chat" style="display:none">
-  <div id="msgs"></div>
-  <div id="bar">
-    <input id="text" placeholder="Message"> </input>
-    <button onclick="send()">➤</button>
+  <!-- JOIN -->
+  <div id="joinBox">
+    <input id="room" placeholder="Secret key"> </input>
+    <input id="user" placeholder="Username"> </input>
+    <button id="joinBtn">Join</button>
   </div>
-</div>
+
+  <!-- CHAT -->
+  <div id="chat" style="display:none">
+    <div id="msgs"></div>
+    <div id="bar">
+      <input id="text" placeholder="Message"> </input>
+      <button id="sendBtn">➤</button>
+    </div>
+  </div>
 </div>
 
 <script>
-let ws, me;
+let ws;
+let myName = "";
 
-function join(){
-  const room=roomInput.value;
-  me=userInput.value;
-  if(!room||!me) return alert("Fill all fields");
+const roomInput = document.getElementById("room");
+const userInput = document.getElementById("user");
+const joinBox = document.getElementById("joinBox");
+const chatBox = document.getElementById("chat");
+const title = document.getElementById("title");
+const msgs = document.getElementById("msgs");
+const textInput = document.getElementById("text");
 
-  ws=new WebSocket(
-    `wss://chat-server.skybaseofj2.workers.dev/?room=${encodeURIComponent(room)}&user=${encodeURIComponent(me)}`
+document.getElementById("joinBtn").onclick = () => {
+  const room = roomInput.value.trim();
+  myName = userInput.value.trim();
+
+  if (!room || !myName) {
+    alert("Enter secret key and username");
+    return;
+  }
+
+  ws = new WebSocket(
+    `wss://chat-server.skybaseofj2.workers.dev/?room=${encodeURIComponent(room)}&user=${encodeURIComponent(myName)}`
   );
 
-  ws.onopen=()=>{
-    joinDiv.style.display="none";
-    chat.style.display="block";
-    title.innerText="Room: "+room;
+  ws.onopen = () => {
+    joinBox.style.display = "none";
+    chatBox.style.display = "flex";
+    title.innerText = "Room: " + room;
   };
 
-  ws.onmessage=e=>{
-    const m=JSON.parse(e.data);
-    const d=document.createElement("div");
-    d.className="msg "+(m.user===me?"me":"other");
-    d.innerHTML="<b>"+m.user+"</b><br>"+m.text;
+  ws.onmessage = e => {
+    const m = JSON.parse(e.data);
+    const d = document.createElement("div");
+    d.className = "msg " + (m.user === myName ? "me" : "other");
+    d.innerHTML = `<b>${m.user}</b><br>${m.text}`;
     msgs.appendChild(d);
-    msgs.scrollTop=msgs.scrollHeight;
+    msgs.scrollTop = msgs.scrollHeight;
   };
-}
 
-function send(){
-  if(!text.value.trim()) return;
-  ws.send(JSON.stringify({user:me,text:text.value}));
-  text.value="";
-}
+  ws.onerror = () => {
+    alert("WebSocket connection failed");
+  };
+};
 
-const roomInput=room;
-const userInput=user;
-const joinDiv=join;
+document.getElementById("sendBtn").onclick = () => {
+  const t = textInput.value.trim();
+  if (!t) return;
+  ws.send(JSON.stringify({ user: myName, text: t }));
+  textInput.value = "";
+};
 </script>
 </body>
 </html>
-
