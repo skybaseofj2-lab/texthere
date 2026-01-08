@@ -1,96 +1,223 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta name="viewport" content="width=device-width">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Private Chat</title>
 
 <style>
-body{margin:0;background:#020617;color:#fff;font-family:system-ui}
-#app{max-width:420px;margin:auto;height:100vh;display:flex;flex-direction:column}
-header{padding:12px;text-align:center;font-weight:600;border-bottom:1px solid #1e293b}
-#joinBox{padding:12px}
-#msgs{flex:1;overflow:auto;padding:10px}
-.msg{margin:6px 0;padding:8px;border-radius:8px;max-width:75%}
-.me{background:#2563eb;margin-left:auto}
-.other{background:#1e293b}
-#bar{display:flex;gap:6px;padding:8px}
-input,button{padding:10px;border-radius:6px;border:none}
-input{flex:1;background:#020617;color:#fff;border:1px solid #1e293b}
-button{background:#2563eb;color:#fff}
+body {
+  margin: 0;
+  background: #0b141a;
+  font-family: system-ui;
+  color: #fff;
+}
+
+#app {
+  max-width: 420px;
+  height: 100vh;
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  background: #0b141a;
+}
+
+header {
+  background: #075e54;
+  padding: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+#join {
+  padding: 16px;
+}
+
+input, button {
+  width: 100%;
+  padding: 12px;
+  margin-top: 10px;
+  border-radius: 8px;
+  border: none;
+}
+
+input {
+  background: #1f2c34;
+  color: #fff;
+}
+
+button {
+  background: #25d366;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#users {
+  padding: 8px;
+  font-size: 13px;
+  background: #111b21;
+  border-bottom: 1px solid #1f2c34;
+}
+
+#typing {
+  font-size: 12px;
+  padding-left: 10px;
+  color: #aaa;
+}
+
+#msgs {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.msg {
+  max-width: 75%;
+  padding: 10px;
+  margin: 6px 0;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.me {
+  background: #dcf8c6;
+  color: #000;
+  margin-left: auto;
+}
+
+.other {
+  background: #202c33;
+}
+
+#bar {
+  display: flex;
+  padding: 8px;
+  background: #1f2c34;
+  gap: 6px;
+}
+
+#text {
+  flex: 1;
+}
 </style>
 </head>
 
 <body>
 <div id="app">
-  <header id="title">Join Chat</header>
+  <header id="title">Private Chat</header>
 
-  <!-- JOIN -->
-  <div id="joinBox">
+  <div id="join">
     <input id="room" placeholder="Secret key"> </input>
     <input id="user" placeholder="Username"> </input>
-    <button id="joinBtn">Join</button>
+    <button onclick="join()">Join Chat</button> 
   </div>
 
-  <!-- CHAT -->
   <div id="chat" style="display:none">
+    <div id="users"></div>
+    <div id="typing"></div>
     <div id="msgs"></div>
     <div id="bar">
       <input id="text" placeholder="Message"> </input>
-      <button id="sendBtn">➤</button>
+      <button onclick="send()">➤</button>
     </div>
   </div>
 </div>
 
 <script>
-let ws;
-let myName = "";
+let ws, roomKey, myName;
 
-const roomInput = document.getElementById("room");
-const userInput = document.getElementById("user");
-const joinBox = document.getElementById("joinBox");
-const chatBox = document.getElementById("chat");
-const title = document.getElementById("title");
-const msgs = document.getElementById("msgs");
-const textInput = document.getElementById("text");
+/* ---------- Encryption ---------- */
+async function getKey(secret) {
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+  return crypto.subtle.importKey("raw", hash, "AES-GCM", false, ["encrypt","decrypt"]);
+}
 
-document.getElementById("joinBtn").onclick = () => {
-  const room = roomInput.value.trim();
-  myName = userInput.value.trim();
+async function encrypt(text) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await getKey(roomKey);
+  const enc = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    new TextEncoder().encode(text)
+  );
+  return { iv: [...iv], data: [...new Uint8Array(enc)] };
+}
 
-  if (!room || !myName) {
-    alert("Enter secret key and username");
-    return;
-  }
+async function decrypt(payload) {
+  const key = await getKey(roomKey);
+  const dec = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: new Uint8Array(payload.iv) },
+    key,
+    new Uint8Array(payload.data)
+  );
+  return new TextDecoder().decode(dec);
+}
+
+/* ---------- UI ---------- */
+function addMsg(user, text) {
+  const d = document.createElement("div");
+  d.className = "msg " + (user === myName ? "me" : "other");
+  d.innerHTML = `<b>${user}</b><br>${text}`;
+  msgs.appendChild(d);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+/* ---------- Join ---------- */
+async function join() {
+  roomKey = room.value.trim();
+  myName = user.value.trim();
+  if (!roomKey || !myName) return alert("Fill all fields");
 
   ws = new WebSocket(
-    `wss://chat-server.skybaseofj2.workers.dev/?room=${encodeURIComponent(room)}&user=${encodeURIComponent(myName)}`
+    `wss://chat-server.skybaseofj2.workers.dev/?room=${encodeURIComponent(roomKey)}`
   );
 
-  ws.onopen = () => {
-    joinBox.style.display = "none";
-    chatBox.style.display = "flex";
-    title.innerText = "Room: " + room;
+  ws.onopen = async () => {
+    join.style.display = "none";
+    chat.style.display = "flex";
+    title.innerText = "Room: " + roomKey;
+
+    // Load history
+    const r = await fetch(
+      `https://chat-server.skybaseofj2.workers.dev/history?room=${roomKey}`
+    );
+    const history = await r.json();
+    for (const m of history) {
+      const txt = await decrypt(m.text);
+      addMsg(m.user, txt);
+    }
   };
 
-  ws.onmessage = e => {
+  ws.onmessage = async e => {
     const m = JSON.parse(e.data);
-    const d = document.createElement("div");
-    d.className = "msg " + (m.user === myName ? "me" : "other");
-    d.innerHTML = `<b>${m.user}</b><br>${m.text}`;
-    msgs.appendChild(d);
-    msgs.scrollTop = msgs.scrollHeight;
-  };
 
-  ws.onerror = () => {
-    alert("WebSocket connection failed");
-  };
-};
+    if (m.type === "users") {
+      users.innerText = "Online: " + m.users.join(", ");
+      return;
+    }
 
-document.getElementById("sendBtn").onclick = () => {
-  const t = textInput.value.trim();
-  if (!t) return;
-  ws.send(JSON.stringify({ user: myName, text: t }));
-  textInput.value = "";
+    if (m.type === "typing") {
+      typing.innerText = `${m.user} is typing...`;
+      setTimeout(() => typing.innerText = "", 1000);
+      return;
+    }
+
+    const txt = await decrypt(m.text);
+    addMsg(m.user, txt);
+  };
+}
+
+/* ---------- Send ---------- */
+async function send() {
+  if (!text.value) return;
+  ws.send(JSON.stringify({
+    user: myName,
+    text: await encrypt(text.value)
+  }));
+  text.value = "";
+}
+
+text.oninput = () => {
+  ws.send(JSON.stringify({ type: "typing", user: myName }));
 };
 </script>
 </body>
