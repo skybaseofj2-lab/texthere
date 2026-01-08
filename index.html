@@ -5,28 +5,38 @@
 <title>Private Chat</title>
 
 <style>
-body {
+/* ---------- RESET ---------- */
+* { box-sizing: border-box; }
+html, body {
   margin: 0;
-  background: #0b141a;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
   font-family: system-ui;
+  background: #0b141a;
   color: #fff;
 }
 
+/* ---------- APP ---------- */
 #app {
   max-width: 420px;
-  height: 100vh;
   margin: auto;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
+  background: #0b141a;
 }
 
+/* ---------- HEADER ---------- */
 header {
   background: #075e54;
   padding: 14px;
   font-weight: 600;
   text-align: center;
+  flex-shrink: 0;
 }
 
+/* ---------- JOIN ---------- */
 #joinBox {
   padding: 16px;
 }
@@ -50,24 +60,30 @@ button {
   cursor: pointer;
 }
 
+/* ---------- CHAT ---------- */
 #chat {
   display: none;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
+/* ---------- USERS / TYPING ---------- */
 #users {
-  padding: 8px;
-  font-size: 13px;
+  padding: 6px 10px;
+  font-size: 12px;
   background: #111b21;
+  flex-shrink: 0;
 }
 
 #typing {
-  font-size: 12px;
-  padding-left: 10px;
+  font-size: 11px;
+  padding: 4px 10px;
   color: #aaa;
+  flex-shrink: 0;
 }
 
+/* ---------- MESSAGES ---------- */
 #msgs {
   flex: 1;
   overflow-y: auto;
@@ -80,6 +96,7 @@ button {
   margin: 6px 0;
   border-radius: 10px;
   font-size: 14px;
+  word-wrap: break-word;
 }
 
 .me {
@@ -92,11 +109,13 @@ button {
   background: #202c33;
 }
 
+/* ---------- INPUT BAR ---------- */
 #bar {
   display: flex;
+  gap: 6px;
   padding: 8px;
   background: #1f2c34;
-  gap: 6px;
+  flex-shrink: 0;
 }
 
 #text {
@@ -111,8 +130,8 @@ button {
 
   <!-- JOIN -->
   <div id="joinBox">
-    <input id="roomInput" placeholder="Secret key"> </input>
-    <input id="userInput" placeholder="Username"> </input>
+    <input id="roomInput" placeholder="Secret key">
+    <input id="userInput" placeholder="Username">
     <button id="joinBtn">Join Chat</button>
   </div>
 
@@ -122,7 +141,7 @@ button {
     <div id="typing"></div>
     <div id="msgs"></div>
     <div id="bar">
-      <input id="text" placeholder="Message"> </input>
+      <input id="text" placeholder="Message">
       <button id="sendBtn">➤</button>
     </div>
   </div>
@@ -140,24 +159,16 @@ const typing = document.getElementById("typing");
 const textInput = document.getElementById("text");
 const title = document.getElementById("title");
 
-/* ---------- State ---------- */
-let ws;
-let roomKey;
-let myName;
+/* ---------- STATE ---------- */
+let ws, roomKey, myName;
 
-/* ---------- Encryption ---------- */
+/* ---------- ENCRYPTION ---------- */
 async function getKey(secret) {
   const hash = await crypto.subtle.digest(
     "SHA-256",
     new TextEncoder().encode(secret)
   );
-  return crypto.subtle.importKey(
-    "raw",
-    hash,
-    "AES-GCM",
-    false,
-    ["encrypt", "decrypt"]
-  );
+  return crypto.subtle.importKey("raw", hash, "AES-GCM", false, ["encrypt","decrypt"]);
 }
 
 async function encrypt(text) {
@@ -194,10 +205,7 @@ function addMsg(user, text) {
 async function joinChat() {
   roomKey = roomInput.value.trim();
   myName = userInput.value.trim();
-  if (!roomKey || !myName) {
-    alert("Enter secret key and username");
-    return;
-  }
+  if (!roomKey || !myName) return alert("Fill all fields");
 
   ws = new WebSocket(
     `wss://chat-server.skybaseofj2.workers.dev/?room=${encodeURIComponent(roomKey)}`
@@ -213,8 +221,7 @@ async function joinChat() {
     );
     const history = await r.json();
     for (const m of history) {
-      const txt = await decrypt(m.text);
-      addMsg(m.user, txt);
+      addMsg(m.user, await decrypt(m.text));
     }
   };
 
@@ -227,13 +234,12 @@ async function joinChat() {
     }
 
     if (m.type === "typing") {
-      typing.innerText = `${m.user} is typing...`;
+      typing.innerText = `${m.user} is typing…`;
       setTimeout(() => typing.innerText = "", 1000);
       return;
     }
 
-    const txt = await decrypt(m.text);
-    addMsg(m.user, txt);
+    addMsg(m.user, await decrypt(m.text));
   };
 }
 
@@ -248,8 +254,7 @@ async function sendMsg() {
 }
 
 textInput.oninput = () => {
-  if (ws)
-    ws.send(JSON.stringify({ type: "typing", user: myName }));
+  if (ws) ws.send(JSON.stringify({ type: "typing", user: myName }));
 };
 
 document.getElementById("joinBtn").onclick = joinChat;
