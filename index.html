@@ -7,6 +7,8 @@
 </head>
 
 <body>
+<h3>Join Chat</h3>
+
 Room: <input id="room"><br><br>
 User: <input id="user"><br><br>
 <button id="join">Join</button>
@@ -24,24 +26,33 @@ let ws;
 let room;
 let user;
 
+// ✅ FIX: explicitly get inputs
+const roomInput = document.getElementById("room");
+const userInput = document.getElementById("user");
+const textInput = document.getElementById("text");
 const msgs = document.getElementById("msgs");
 
 function add(u, t) {
   const d = document.createElement("div");
   d.textContent = u + ": " + t;
   msgs.appendChild(d);
+  msgs.scrollTop = msgs.scrollHeight;
 }
 
 document.getElementById("join").onclick = async () => {
-  room = roomInput.value;
-  user = userInput.value;
+  room = roomInput.value.trim();
+  user = userInput.value.trim();
+  if (!room || !user) {
+    alert("Enter room and username");
+    return;
+  }
 
   document.getElementById("chat").style.display = "block";
 
-  // 🔹 TRY loading history (non-blocking)
+  // Load history (non-blocking)
   try {
     const res = await fetch(
-      `https://chat-server.skybaseofj2.workers.dev/history?room=${room}`
+      `https://chat-server.skybaseofj2.workers.dev/history?room=${encodeURIComponent(room)}`
     );
     const history = await res.json();
     history.forEach(m => add(m.user, m.text));
@@ -49,9 +60,9 @@ document.getElementById("join").onclick = async () => {
     console.warn("History load failed, continuing...");
   }
 
-  // 🔹 ALWAYS connect WebSocket
+  // Open WebSocket
   ws = new WebSocket(
-    `wss://chat-server.skybaseofj2.workers.dev/?room=${room}`
+    `wss://chat-server.skybaseofj2.workers.dev/?room=${encodeURIComponent(room)}`
   );
 
   ws.onopen = () => {
@@ -62,18 +73,23 @@ document.getElementById("join").onclick = async () => {
     const m = JSON.parse(e.data);
     add(m.user, m.text);
   };
+
+  ws.onerror = e => {
+    console.error("WebSocket error", e);
+  };
 };
 
 document.getElementById("send").onclick = () => {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (!textInput.value.trim()) return;
 
   ws.send(JSON.stringify({
     user,
-    text: document.getElementById("text").value,
+    text: textInput.value,
     time: Date.now()
   }));
 
-  document.getElementById("text").value = "";
+  textInput.value = "";
 };
 </script>
 </body>
