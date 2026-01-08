@@ -190,6 +190,18 @@ function joinChat() {
     chatBox.style.display = "grid";
     title.innerText = "Room: " + roomKey;
 
+    // Fetch offline messages
+fetch(
+  `https://chat-server.skybaseofj2.workers.dev/history?room=${encodeURIComponent(roomKey)}`
+)
+.then(r => r.json())
+.then(history => {
+  history.forEach(msg => {
+    addMsg(msg);
+    saveMessage(roomKey, msg); // keeps local cache in sync
+  });
+});
+
     // load local history
     loadHistory(roomKey).forEach(m => {
       addMsg(m.user, m.text);
@@ -230,3 +242,4 @@ textInput.addEventListener("input", () => {
 </script>
 </body>
 </html>
+
