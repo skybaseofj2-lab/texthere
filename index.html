@@ -3,12 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Minimal Chat</title>
+<title>Chat</title>
 </head>
 
 <body>
-<h3>Join Chat</h3>
-
 Room: <input id="room"><br><br>
 User: <input id="user"><br><br>
 <button id="join">Join</button>
@@ -16,7 +14,7 @@ User: <input id="user"><br><br>
 <hr>
 
 <div id="chat" style="display:none">
-  <div id="msgs" style="height:300px;overflow:auto;border:1px solid #ccc"></div>
+  <div id="msgs" style="height:300px;overflow:auto;border:1px solid #000"></div>
   <input id="text">
   <button id="send">Send</button>
 </div>
@@ -25,68 +23,53 @@ User: <input id="user"><br><br>
 let ws;
 let room;
 let user;
-let socketOpen = false;
 
 const msgs = document.getElementById("msgs");
-
-function log(msg) {
-  console.log(msg);
-}
 
 function add(u, t) {
   const d = document.createElement("div");
   d.textContent = u + ": " + t;
   msgs.appendChild(d);
-  msgs.scrollTop = msgs.scrollHeight;
 }
 
 document.getElementById("join").onclick = async () => {
-  room = document.getElementById("room").value;
-  user = document.getElementById("user").value;
-  if (!room || !user) return alert("Fill fields");
+  room = roomInput.value;
+  user = userInput.value;
 
   document.getElementById("chat").style.display = "block";
 
-  // Load history
-  const res = await fetch(
-    `https://chat-server.skybaseofj2.workers.dev/history?room=${room}`
-  );
-  const history = await res.json();
-  history.forEach(m => add(m.user, m.text));
+  // 🔹 TRY loading history (non-blocking)
+  try {
+    const res = await fetch(
+      `https://chat-server.skybaseofj2.workers.dev/history?room=${room}`
+    );
+    const history = await res.json();
+    history.forEach(m => add(m.user, m.text));
+  } catch (e) {
+    console.warn("History load failed, continuing...");
+  }
 
-  // Open socket
+  // 🔹 ALWAYS connect WebSocket
   ws = new WebSocket(
     `wss://chat-server.skybaseofj2.workers.dev/?room=${room}`
   );
 
   ws.onopen = () => {
-    socketOpen = true;
-    log("SOCKET OPEN");
+    console.log("SOCKET OPEN");
   };
 
   ws.onmessage = e => {
     const m = JSON.parse(e.data);
     add(m.user, m.text);
   };
-
-  ws.onerror = e => {
-    log("WS ERROR");
-    console.error(e);
-  };
 };
 
 document.getElementById("send").onclick = () => {
-  if (!socketOpen) {
-    alert("Socket not open yet. Wait 1 second.");
-    return;
-  }
-
-  const text = document.getElementById("text").value;
-  if (!text) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
   ws.send(JSON.stringify({
     user,
-    text,
+    text: document.getElementById("text").value,
     time: Date.now()
   }));
 
