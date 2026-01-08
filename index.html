@@ -18,7 +18,6 @@ body {
   margin: auto;
   display: flex;
   flex-direction: column;
-  background: #0b141a;
 }
 
 header {
@@ -28,7 +27,7 @@ header {
   text-align: center;
 }
 
-#join {
+#joinBox {
   padding: 16px;
 }
 
@@ -51,11 +50,16 @@ button {
   cursor: pointer;
 }
 
+#chat {
+  display: none;
+  flex-direction: column;
+  height: 100%;
+}
+
 #users {
   padding: 8px;
   font-size: 13px;
   background: #111b21;
-  border-bottom: 1px solid #1f2c34;
 }
 
 #typing {
@@ -105,30 +109,55 @@ button {
 <div id="app">
   <header id="title">Private Chat</header>
 
-  <div id="join">
-    <input id="room" placeholder="Secret key"> </input>
-    <input id="user" placeholder="Username"> </input>
-    <button onclick="join()">Join Chat</button> 
+  <!-- JOIN -->
+  <div id="joinBox">
+    <input id="roomInput" placeholder="Secret key"> </input>
+    <input id="userInput" placeholder="Username"> </input>
+    <button id="joinBtn">Join Chat</button>
   </div>
 
-  <div id="chat" style="display:none">
+  <!-- CHAT -->
+  <div id="chat">
     <div id="users"></div>
     <div id="typing"></div>
     <div id="msgs"></div>
     <div id="bar">
       <input id="text" placeholder="Message"> </input>
-      <button onclick="send()">➤</button>
+      <button id="sendBtn">➤</button>
     </div>
   </div>
 </div>
 
 <script>
-let ws, roomKey, myName;
+/* ---------- DOM ---------- */
+const roomInput = document.getElementById("roomInput");
+const userInput = document.getElementById("userInput");
+const joinBox = document.getElementById("joinBox");
+const chatBox = document.getElementById("chat");
+const msgs = document.getElementById("msgs");
+const users = document.getElementById("users");
+const typing = document.getElementById("typing");
+const textInput = document.getElementById("text");
+const title = document.getElementById("title");
+
+/* ---------- State ---------- */
+let ws;
+let roomKey;
+let myName;
 
 /* ---------- Encryption ---------- */
 async function getKey(secret) {
-  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
-  return crypto.subtle.importKey("raw", hash, "AES-GCM", false, ["encrypt","decrypt"]);
+  const hash = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(secret)
+  );
+  return crypto.subtle.importKey(
+    "raw",
+    hash,
+    "AES-GCM",
+    false,
+    ["encrypt", "decrypt"]
+  );
 }
 
 async function encrypt(text) {
@@ -161,24 +190,26 @@ function addMsg(user, text) {
   msgs.scrollTop = msgs.scrollHeight;
 }
 
-/* ---------- Join ---------- */
-async function join() {
-  roomKey = room.value.trim();
-  myName = user.value.trim();
-  if (!roomKey || !myName) return alert("Fill all fields");
+/* ---------- JOIN ---------- */
+async function joinChat() {
+  roomKey = roomInput.value.trim();
+  myName = userInput.value.trim();
+  if (!roomKey || !myName) {
+    alert("Enter secret key and username");
+    return;
+  }
 
   ws = new WebSocket(
     `wss://chat-server.skybaseofj2.workers.dev/?room=${encodeURIComponent(roomKey)}`
   );
 
   ws.onopen = async () => {
-    join.style.display = "none";
-    chat.style.display = "flex";
+    joinBox.style.display = "none";
+    chatBox.style.display = "flex";
     title.innerText = "Room: " + roomKey;
 
-    // Load history
     const r = await fetch(
-      `https://chat-server.skybaseofj2.workers.dev/history?room=${roomKey}`
+      `https://chat-server.skybaseofj2.workers.dev/history?room=${encodeURIComponent(roomKey)}`
     );
     const history = await r.json();
     for (const m of history) {
@@ -206,19 +237,23 @@ async function join() {
   };
 }
 
-/* ---------- Send ---------- */
-async function send() {
-  if (!text.value) return;
+/* ---------- SEND ---------- */
+async function sendMsg() {
+  if (!textInput.value) return;
   ws.send(JSON.stringify({
     user: myName,
-    text: await encrypt(text.value)
+    text: await encrypt(textInput.value)
   }));
-  text.value = "";
+  textInput.value = "";
 }
 
-text.oninput = () => {
-  ws.send(JSON.stringify({ type: "typing", user: myName }));
+textInput.oninput = () => {
+  if (ws)
+    ws.send(JSON.stringify({ type: "typing", user: myName }));
 };
+
+document.getElementById("joinBtn").onclick = joinChat;
+document.getElementById("sendBtn").onclick = sendMsg;
 </script>
 </body>
 </html>
