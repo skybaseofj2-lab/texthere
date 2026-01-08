@@ -1,177 +1,97 @@
 <!DOCTYPE html>
 <html>
 <head>
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Chat</title>
-
-<style>
-body {
-  margin: 0;
-  background: #0b141a;
-  color: #fff;
-  font-family: system-ui;
-}
-#app {
-  max-width: 420px;
-  height: 100vh;
-  margin: auto;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-}
-header {
-  background: #075e54;
-  padding: 12px;
-  text-align: center;
-  font-weight: 600;
-}
-#join {
-  padding: 12px;
-}
-#msgs {
-  padding: 10px;
-  overflow-y: auto;
-}
-.msg {
-  margin: 6px 0;
-  padding: 8px;
-  border-radius: 8px;
-  max-width: 75%;
-}
-.me {
-  background: #dcf8c6;
-  color: #000;
-  margin-left: auto;
-}
-.other {
-  background: #202c33;
-}
-#bar {
-  display: flex;
-  gap: 6px;
-  padding: 8px;
-  background: #1f2c34;
-}
-textarea {
-  flex: 1;
-  background: #1f2c34;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 8px;
-}
-button {
-  background: #25d366;
-  border: none;
-  border-radius: 6px;
-  padding: 8px 12px;
-  cursor: pointer;
-}
-</style>
+<title>Minimal Chat</title>
 </head>
 
 <body>
-<div id="app">
-  <header id="title">Join Chat</header>
+<h3>Join Chat</h3>
 
-  <div id="join">
-    <input id="room" placeholder="Room"><br><br>
-    <input id="user" placeholder="Username"><br><br>
-    <button id="joinBtn">Join</button>
-  </div>
+Room: <input id="room"><br><br>
+User: <input id="user"><br><br>
+<button id="join">Join</button>
 
-  <div id="msgs"></div>
+<hr>
 
-  <div id="bar" style="display:none">
-    <textarea id="text" placeholder="Type a message..."></textarea>
-    <button id="sendBtn">➤</button>
-  </div>
+<div id="chat" style="display:none">
+  <div id="msgs" style="height:300px;overflow:auto;border:1px solid #ccc"></div>
+  <input id="text">
+  <button id="send">Send</button>
 </div>
 
 <script>
-let ws = null;
-let room = "";
-let username = "";
-let queue = []; // 🔑 message queue
+let ws;
+let room;
+let user;
+let socketOpen = false;
 
 const msgs = document.getElementById("msgs");
-const textBox = document.getElementById("text");
-const title = document.getElementById("title");
-const joinBtn = document.getElementById("joinBtn");
-const sendBtn = document.getElementById("sendBtn");
 
-function addMsg(u, t) {
+function log(msg) {
+  console.log(msg);
+}
+
+function add(u, t) {
   const d = document.createElement("div");
-  d.className = "msg " + (u === username ? "me" : "other");
-  d.innerHTML = `<b>${u}</b><br>${t}`;
+  d.textContent = u + ": " + t;
   msgs.appendChild(d);
   msgs.scrollTop = msgs.scrollHeight;
 }
 
-async function joinChat() {
-  room = document.getElementById("room").value.trim();
-  username = document.getElementById("user").value.trim();
-  if (!room || !username) return;
+document.getElementById("join").onclick = async () => {
+  room = document.getElementById("room").value;
+  user = document.getElementById("user").value;
+  if (!room || !user) return alert("Fill fields");
 
-  document.getElementById("join").style.display = "none";
-  document.getElementById("bar").style.display = "flex";
-  title.innerText = "Room: " + room;
+  document.getElementById("chat").style.display = "block";
 
-  // Load stored messages
+  // Load history
   const res = await fetch(
-    `https://chat-server.skybaseofj2.workers.dev/history?room=${encodeURIComponent(room)}`
+    `https://chat-server.skybaseofj2.workers.dev/history?room=${room}`
   );
   const history = await res.json();
-  history.forEach(m => addMsg(m.user, m.text));
+  history.forEach(m => add(m.user, m.text));
 
-  // Connect WebSocket
+  // Open socket
   ws = new WebSocket(
-    `wss://chat-server.skybaseofj2.workers.dev/?room=${encodeURIComponent(room)}`
+    `wss://chat-server.skybaseofj2.workers.dev/?room=${room}`
   );
 
   ws.onopen = () => {
-    // 🔑 Flush queued messages
-    queue.forEach(m => ws.send(JSON.stringify(m)));
-    queue = [];
+    socketOpen = true;
+    log("SOCKET OPEN");
   };
 
   ws.onmessage = e => {
     const m = JSON.parse(e.data);
-    addMsg(m.user, m.text);
+    add(m.user, m.text);
   };
-}
 
-function sendMessage() {
-  const msgText = textBox.value.trim();
-  if (!msgText) return;
+  ws.onerror = e => {
+    log("WS ERROR");
+    console.error(e);
+  };
+};
 
-  const payload = {
-    user: username,
-    text: msgText,
+document.getElementById("send").onclick = () => {
+  if (!socketOpen) {
+    alert("Socket not open yet. Wait 1 second.");
+    return;
+  }
+
+  const text = document.getElementById("text").value;
+  if (!text) return;
+
+  ws.send(JSON.stringify({
+    user,
+    text,
     time: Date.now()
-  };
+  }));
 
-  // 🔑 ALWAYS add locally to UI
-  addMsg(username, msgText);
-
-  // 🔑 Send or queue
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(payload));
-  } else {
-    queue.push(payload);
-  }
-
-  textBox.value = "";
-}
-
-joinBtn.addEventListener("click", joinChat);
-sendBtn.addEventListener("click", sendMessage);
-
-textBox.addEventListener("keydown", e => {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
-});
+  document.getElementById("text").value = "";
+};
 </script>
 </body>
 </html>
